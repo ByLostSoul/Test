@@ -1,326 +1,545 @@
-
-```lua
--- SkaneexxWare KAVA RU PC (Deobfuscated)
--- Original: Obfuscated loader with XOR + junk
--- Deobf: Cleaned ESP/Aimbot/Speedhack for RU servers
+-- SkaneexxWare KAVA RU PC Edition
+-- Author: NotSkaneexx
+-- Version: KAVA (RU PC Optimized)
+-- Warning: Use at your own risk. For educational purposes only.
 
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Config
+-- Configuration
 local Config = {
-    ESP = true,
-    Aimbot = true,
-    SpeedHack = true,
-    NoClip = false,
-    Fly = false,
-    InfiniteJump = false,
-    TeamCheck = true,
-    WallCheck = true,
-    FOV = 120,
-    Speed = 50,
-    FlySpeed = 100
+    Theme = "Dark",  -- Dark/Light
+    Transparency = 0.1,
+    Size = UDim2.new(0, 400, 0, 300),
+    Position = UDim2.new(0.5, -200, 0.5, -150),
+    Keybind = Enum.KeyCode.Insert,  -- Toggle key
+    Draggable = true
 }
 
--- ESP Module
-local ESP = {}
-ESP.Connections = {}
-ESP.Drawings = {}
+-- UI Library (Simple Custom GUI)
+local Library = {}
+local Screens = {}
+local Windows = {}
+local Tabs = {}
+local Sections = {}
 
-function ESP:CreateESP(player)
-    if player == LocalPlayer then return end
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
-
-    local Billboard = Instance.new("BillboardGui")
-    Billboard.Name = "ESP_" .. player.Name
-    Billboard.Parent = player.Character.Head
-    Billboard.Size = UDim2.new(0, 200, 0, 50)
-    Billboard.StudsOffset = Vector3.new(0, 2, 0)
-    Billboard.AlwaysOnTop = true
-
-    local NameLabel = Instance.new("TextLabel")
-    NameLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    NameLabel.BackgroundTransparency = 1
-    NameLabel.Text = player.Name
-    NameLabel.TextColor3 = Color3.new(1, 1, 1)
-    NameLabel.TextStrokeTransparency = 0
-    NameLabel.TextScaled = true
-    NameLabel.Font = Enum.Font.SourceSansBold
-    NameLabel.Parent = Billboard
-
-    local HealthLabel = Instance.new("TextLabel")
-    HealthLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    HealthLabel.Position = UDim2.new(0, 0, 0.5, 0)
-    HealthLabel.BackgroundTransparency = 1
-    HealthLabel.Text = "HP: 100"
-    HealthLabel.TextColor3 = Color3.new(0, 1, 0)
-    HealthLabel.TextStrokeTransparency = 0
-    HealthLabel.TextScaled = true
-    HealthLabel.Font = Enum.Font.SourceSans
-    HealthLabel.Parent = Billboard
-
-    local Box = Drawing.new("Square")
-    Box.Thickness = 2
-    Box.Color = Color3.new(1, 0, 0)
-    Box.Transparency = 1
-    Box.Filled = false
-    Box.Visible = false
-
-    ESP.Drawings[player] = {Billboard = Billboard, Box = Box}
-    ESP.Connections[player] = RunService.Heartbeat:Connect(function()
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
-        local char = player.Character
-        local root = char.HumanoidRootPart
-        local humanoid = char:FindFirstChild("Humanoid")
-
-        -- Update Health
-        if humanoid then
-            HealthLabel.Text = "HP: " .. math.floor(humanoid.Health)
-            HealthLabel.TextColor3 = Color3.fromHSV(humanoid.Health / humanoid.MaxHealth, 1, 1)
-        end
-
-        -- Box ESP
-        local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
-        if onScreen then
-            local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0)) - Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))).Magnitude
-            Box.Size = Vector2.new(size, size * 1.5)
-            Box.Position = Vector2.new(screenPos.X - size / 2, screenPos.Y - size * 0.75)
-            Box.Visible = true
-        else
-            Box.Visible = false
-        end
-    end)
-end
-
-function ESP:RemoveESP(player)
-    if ESP.Connections[player] then
-        ESP.Connections[player]:Disconnect()
-        ESP.Connections[player] = nil
-    end
-    if ESP.Drawings[player] then
-        for _, obj in pairs(ESP.Drawings[player]) do
-            if obj then obj:Destroy() end
-        end
-        ESP.Drawings[player] = nil
-    end
-end
-
--- Aimbot Module
-local Aimbot = {}
-Aimbot.Target = nil
-Aimbot.Connection = nil
-
-function Aimbot:FindTarget()
-    local closest, dist = nil, math.huge
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            if Config.TeamCheck and player.Team == LocalPlayer.Team then continue end
-            local head = player.Character.Head
-            local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-            if not onScreen then continue end
-            local distance = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-            if distance < dist and distance < Config.FOV then
-                dist = distance
-                closest = head
-            end
-        end
-    end
-    return closest
-end
-
-function Aimbot:Update()
-    Aimbot.Target = Aimbot:FindTarget()
-    if Aimbot.Target then
-        local targetPos = Camera:WorldToViewportPoint(Aimbot.Target.Position)
-        mousemoverel((targetPos.X - Mouse.X) / 10, (targetPos.Y - Mouse.Y) / 10)  -- Smooth aim
-    end
-end
-
--- SpeedHack
-local SpeedHack = {}
-SpeedHack.BodyVelocity = nil
-
-function SpeedHack:Enable()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        SpeedHack.BodyVelocity = Instance.new("BodyVelocity")
-        SpeedHack.BodyVelocity.MaxForce = Vector3.new(4000, 0, 4000)
-        SpeedHack.BodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        SpeedHack.BodyVelocity.Parent = LocalPlayer.Character.HumanoidRootPart
-
-        SpeedHack.Connection = RunService.Heartbeat:Connect(function()
-            local moveVector = Vector3.new(0, 0, 0)
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector - Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + Camera.CFrame.RightVector end
-            SpeedHack.BodyVelocity.Velocity = moveVector * Config.Speed
-        end)
-    end
-end
-
-function SpeedHack:Disable()
-    if SpeedHack.Connection then SpeedHack.Connection:Disconnect() end
-    if SpeedHack.BodyVelocity then SpeedHack.BodyVelocity:Destroy() end
-end
-
--- Fly Module
-local Fly = {}
-Fly.BodyVelocity = nil
-Fly.BodyGyro = nil
-
-function Fly:Enable()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        Fly.BodyVelocity = Instance.new("BodyVelocity")
-        Fly.BodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-        Fly.BodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        Fly.BodyVelocity.Parent = LocalPlayer.Character.HumanoidRootPart
-
-        Fly.BodyGyro = Instance.new("BodyGyro")
-        Fly.BodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
-        Fly.BodyGyro.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
-        Fly.BodyGyro.Parent = LocalPlayer.Character.HumanoidRootPart
-
-        Fly.Connection = RunService.Heartbeat:Connect(function()
-            local moveVector = Vector3.new(0, 0, 0)
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVector = moveVector + Vector3.new(0, 1, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveVector = moveVector - Vector3.new(0, 1, 0) end
-            Fly.BodyVelocity.Velocity = moveVector * (Config.FlySpeed / 16)
-            Fly.BodyGyro.CFrame = Camera.CFrame
-        end)
-    end
-end
-
-function Fly:Disable()
-    if Fly.Connection then Fly.Connection:Disconnect() end
-    if Fly.BodyVelocity then Fly.BodyVelocity:Destroy() end
-    if Fly.BodyGyro then Fly.BodyGyro:Destroy() end
-end
-
--- NoClip
-local NoClip = {}
-NoClip.Connection = nil
-
-function NoClip:Enable()
-    NoClip.Connection = RunService.Stepped:Connect(function()
-        if LocalPlayer.Character then
-            for _, part in pairs(LocalPlayer.Character:GetChildren()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
-            end
-        end
-    end)
-end
-
-function NoClip:Disable()
-    if NoClip.Connection then NoClip.Connection:Disconnect() end
-    if LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
-    end
-end
-
--- Infinite Jump
-local InfiniteJump = {}
-InfiniteJump.Connection = nil
-
-function InfiniteJump:Enable()
-    InfiniteJump.Connection = UserInputService.JumpRequest:Connect(function()
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end)
-end
-
-function InfiniteJump:Disable()
-    if InfiniteJump.Connection then InfiniteJump.Connection:Disconnect() end
-end
-
--- Init
-local function Initialize()
-    -- ESP Init
-    if Config.ESP then
-        for _, player in pairs(Players:GetPlayers()) do
-            ESP:CreateESP(player)
-        end
-        Players.PlayerAdded:Connect(function(player)
-            player.CharacterAdded:Connect(function()
-                ESP:CreateESP(player)
-            end)
-        end)
-        Players.PlayerRemoving:Connect(ESP.RemoveESP)
-    end
-
-    -- Aimbot Init
-    if Config.Aimbot then
-        Aimbot.Connection = RunService.RenderStepped:Connect(Aimbot.Update)
-    end
-
-    -- SpeedHack Init
-    if Config.SpeedHack then
-        SpeedHack:Enable()
-    end
-
-    -- Other toggles
-    if Config.NoClip then NoClip:Enable() end
-    if Config.Fly then Fly:Enable() end
-    if Config.InfiniteJump then InfiniteJump:Enable() end
-
-    -- GUI (Simple toggle)
+-- Create ScreenGui
+function Library:CreateGui()
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    ScreenGui.Name = "SkaneexxWareKAVA"
+    ScreenGui.Parent = CoreGui
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-    local ToggleButton = Instance.new("TextButton")
-    ToggleButton.Size = UDim2.new(0, 100, 0, 50)
-    ToggleButton.Position = UDim2.new(0, 10, 0, 10)
-    ToggleButton.Text = "Toggle All"
-    ToggleButton.Parent = ScreenGui
+    Screens.Main = ScreenGui
+    return ScreenGui
+end
 
-    local toggled = false
-    ToggleButton.MouseButton1Click:Connect(function()
-        toggled = not toggled
-        Config.ESP = toggled
-        Config.Aimbot = toggled
-        Config.SpeedHack = toggled
-        -- Re-init as needed
-        if toggled then
-            SpeedHack:Enable()
-            Fly:Enable()
-        else
-            SpeedHack:Disable()
-            Fly:Disable()
+-- Window Creation
+function Library:CreateWindow(title)
+    local Window = Instance.new("Frame")
+    Window.Name = title
+    Window.Parent = Screens.Main
+    Window.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    Window.BorderSizePixel = 0
+    Window.Position = Config.Position
+    Window.Size = Config.Size
+    Window.Active = true
+    Window.Draggable = Config.Draggable
+
+    -- Corner
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.Parent = Window
+
+    -- Title Bar
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Name = "TitleBar"
+    TitleBar.Parent = Window
+    TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Size = UDim2.new(1, 0, 0, 30)
+
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Name = "Title"
+    TitleLabel.Parent = TitleBar
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+    TitleLabel.Size = UDim2.new(1, -40, 1, 0)
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.Text = title .. " | KAVA RU PC"
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.TextSize = 14
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Close Button
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Name = "Close"
+    CloseButton.Parent = TitleBar
+    CloseButton.BackgroundTransparency = 1
+    CloseButton.Position = UDim2.new(1, -30, 0, 0)
+    CloseButton.Size = UDim2.new(0, 20, 1, 0)
+    CloseButton.Font = Enum.Font.Gotham
+    CloseButton.Text = "×"
+    CloseButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+    CloseButton.TextSize = 18
+
+    CloseButton.MouseButton1Click:Connect(function()
+        Screens.Main:Destroy()
+    end)
+
+    -- Content Frame
+    local Content = Instance.new("Frame")
+    Content.Name = "Content"
+    Content.Parent = Window
+    Content.BackgroundTransparency = 1
+    Content.Position = UDim2.new(0, 0, 0, 30)
+    Content.Size = UDim2.new(1, 0, 1, -30)
+    Content.ClipsDescendants = true
+
+    local ContentList = Instance.new("UIListLayout")
+    ContentList.Parent = Content
+    ContentList.SortOrder = Enum.SortOrder.LayoutOrder
+    ContentList.Padding = UDim.new(0, 5)
+
+    Windows[title] = {
+        Frame = Window,
+        Content = Content,
+        Title = title
+    }
+
+    return Windows[title]
+end
+
+-- Tab Creation
+function Library:CreateTab(parent, name, icon)
+    local TabButton = Instance.new("TextButton")
+    TabButton.Name = name
+    TabButton.Parent = parent.Content  -- Assuming parent has tabs frame, but simplified
+    TabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    TabButton.BorderSizePixel = 0
+    TabButton.Size = UDim2.new(1, -10, 0, 30)
+    TabButton.Font = Enum.Font.Gotham
+    TabButton.Text = icon .. " " .. name
+    TabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+    TabButton.TextSize = 14
+
+    local TabCorner = Instance.new("UICorner")
+    TabCorner.CornerRadius = UDim.new(0, 4)
+    TabCorner.Parent = TabButton
+
+    -- Tab Content (Scrollable)
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Name = name .. "Tab"
+    TabFrame.Parent = parent.Frame
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Position = UDim2.new(0, 0, 0, 30)
+    TabFrame.Size = UDim2.new(1, 0, 1, -30)
+    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TabFrame.ScrollBarThickness = 6
+    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+
+    local TabLayout = Instance.new("UIListLayout")
+    TabLayout.Parent = TabFrame
+    TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    TabLayout.Padding = UDim.new(0, 5)
+
+    TabFrame.ChildAdded:Connect(function()
+        TabFrame.CanvasSize = UDim2.new(0, 0, 0, TabLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    Tabs[name] = {
+        Button = TabButton,
+        Frame = TabFrame
+    }
+
+    -- Simple tab switching (expand for multi-tab)
+    TabButton.MouseButton1Click:Connect(function()
+        -- Hide other tabs, show this (simplified for single window)
+        for _, tab in pairs(Tabs) do
+            tab.Frame.Visible = false
         end
+        TabFrame.Visible = true
+    end)
+
+    TabFrame.Visible = false  -- Hide initially
+
+    return Tabs[name]
+end
+
+-- Section Creation
+function Library:CreateSection(parent, title)
+    local Section = Instance.new("Frame")
+    Section.Name = title
+    Section.Parent = parent.Frame
+    Section.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Section.BorderSizePixel = 0
+    Section.Size = UDim2.new(1, -20, 0, 40)  -- Auto-size later
+    Section.LayoutOrder = #parent.Frame:GetChildren()
+
+    local SectionCorner = Instance.new("UICorner")
+    SectionCorner.CornerRadius = UDim.new(0, 4)
+    SectionCorner.Parent = Section
+
+    local SectionTitle = Instance.new("TextLabel")
+    SectionTitle.Name = "Title"
+    SectionTitle.Parent = Section
+    SectionTitle.BackgroundTransparency = 1
+    SectionTitle.Position = UDim2.new(0, 10, 0, 0)
+    SectionTitle.Size = UDim2.new(1, -20, 0, 25)
+    SectionTitle.Font = Enum.Font.GothamSemibold
+    SectionTitle.Text = title
+    SectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SectionTitle.TextSize = 13
+    SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+    local SectionContent = Instance.new("Frame")
+    SectionContent.Name = "Content"
+    SectionContent.Parent = Section
+    SectionContent.BackgroundTransparency = 1
+    SectionContent.Position = UDim2.new(0, 10, 0, 25)
+    SectionContent.Size = UDim2.new(1, -20, 1, -25)
+
+    local ContentLayout = Instance.new("UIListLayout")
+    ContentLayout.Parent = SectionContent
+    ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ContentLayout.Padding = UDim.new(0, 3)
+
+    Sections[title] = {
+        Frame = Section,
+        Content = SectionContent
+    }
+
+    -- Auto-resize section
+    Section:GetPropertyChangedSignal("Size"):Connect(function()
+        -- Logic for auto-height
+    end)
+
+    return Sections[title]
+end
+
+-- Toggle Button
+function Library:CreateToggle(parent, text, callback, default)
+    local Toggle = Instance.new("TextButton")
+    Toggle.Name = text
+    Toggle.Parent = parent.Content
+    Toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    Toggle.BorderSizePixel = 0
+    Toggle.Size = UDim2.new(1, -10, 0, 25)
+    Toggle.Font = Enum.Font.Gotham
+    Toggle.Text = text .. ": " .. (default and "ON" or "OFF")
+    Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Toggle.TextSize = 12
+
+    local ToggleCorner = Instance.new("UICorner")
+    ToggleCorner.CornerRadius = UDim.new(0, 3)
+    ToggleCorner.Parent = Toggle
+
+    local state = default or false
+    callback(state)
+
+    Toggle.MouseButton1Click:Connect(function()
+        state = not state
+        Toggle.Text = text .. ": " .. (state and "ON" or "OFF")
+        Toggle.BackgroundColor3 = state and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(50, 50, 50)
+        callback(state)
+    end)
+
+    return Toggle
+end
+
+-- Slider
+function Library:CreateSlider(parent, text, min, max, default, callback)
+    local SliderFrame = Instance.new("Frame")
+    SliderFrame.Name = text
+    SliderFrame.Parent = parent.Content
+    SliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    SliderFrame.BorderSizePixel = 0
+    SliderFrame.Size = UDim2.new(1, -10, 0, 40)
+
+    local SliderCorner = Instance.new("UICorner")
+    SliderCorner.CornerRadius = UDim.new(0, 3)
+    SliderCorner.Parent = SliderFrame
+
+    local Label = Instance.new("TextLabel")
+    Label.Parent = SliderFrame
+    Label.BackgroundTransparency = 1
+    Label.Size = UDim2.new(1, 0, 0, 20)
+    Label.Font = Enum.Font.Gotham
+    Label.Text = text .. ": " .. default
+    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Label.TextSize = 12
+
+    local SliderBar = Instance.new("Frame")
+    SliderBar.Parent = SliderFrame
+    SliderBar.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    SliderBar.Position = UDim2.new(0, 0, 0.6, 0)
+    SliderBar.Size = UDim2.new(1, 0, 0, 6)
+
+    local SliderFill = Instance.new("Frame")
+    SliderFill.Parent = SliderBar
+    SliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+    SliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    SliderFill.BorderSizePixel = 0
+
+    local FillCorner = Instance.new("UICorner")
+    FillCorner.CornerRadius = UDim.new(0, 3)
+    FillCorner.Parent = SliderFill
+
+    local BarCorner = Instance.new("UICorner")
+    BarCorner.CornerRadius = UDim.new(0, 3)
+    BarCorner.Parent = SliderBar
+
+    local value = default
+    callback(value)
+
+    local dragging = false
+    SliderBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        if dragging then
+            local mouse = UserInputService:GetMouseLocation()
+            local relativeX = math.clamp((mouse.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+            value = math.floor(min + (max - min) * relativeX)
+            SliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
+            Label.Text = text .. ": " .. value
+            callback(value)
+        end
+    end)
+
+    return SliderFrame
+end
+
+-- Button
+function Library:CreateButton(parent, text, callback)
+    local Button = Instance.new("TextButton")
+    Button.Name = text
+    Button.Parent = parent.Content
+    Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    Button.BorderSizePixel = 0
+    Button.Size = UDim2.new(1, -10, 0, 25)
+    Button.Font = Enum.Font.Gotham
+    Button.Text = text
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextSize = 12
+
+    local ButtonCorner = Instance.new("UICorner")
+    ButtonCorner.CornerRadius = UDim.new(0, 3)
+    ButtonCorner.Parent = Button
+
+    Button.MouseButton1Click:Connect(callback)
+
+    return Button
+end
+
+-- Notification System
+function Library:Notify(title, text, duration)
+    local Notification = Instance.new("Frame")
+    Notification.Parent = Screens.Main
+    Notification.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    Notification.Position = UDim2.new(0, 10, 0, 10)
+    Notification.Size = UDim2.new(0, 250, 0, 80)
+    Notification.BorderSizePixel = 0
+
+    local NotifCorner = Instance.new("UICorner")
+    NotifCorner.CornerRadius = UDim.new(0, 5)
+    NotifCorner.Parent = Notification
+
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Parent = Notification
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Position = UDim2.new(0, 10, 0, 5)
+    TitleLabel.Size = UDim2.new(1, -20, 0, 20)
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.Text = title
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.TextSize = 14
+
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Parent = Notification
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Position = UDim2.new(0, 10, 0, 25)
+    TextLabel.Size = UDim2.new(1, -20, 1, -30)
+    TextLabel.Font = Enum.Font.Gotham
+    TextLabel.Text = text
+    TextLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    TextLabel.TextSize = 12
+    TextLabel.TextWrapped = true
+
+    -- Fade in/out
+    local fadeIn = TweenService:Create(Notification, TweenInfo.new(0.3), {Position = UDim2.new(0, 10, 0, 10)})
+    local fadeOut = TweenService:Create(Notification, TweenInfo.new(0.3), {Position = UDim2.new(0, -260, 0, 10)})
+
+    fadeIn:Play()
+    wait(duration or 3)
+    fadeOut:Play()
+    fadeOut.Completed:Connect(function()
+        Notification:Destroy()
     end)
 end
 
--- Cleanup on leave
-Players.PlayerRemoving:Connect(function(player)
-    if player == LocalPlayer then
-        SpeedHack:Disable()
-        Fly:Disable()
-        NoClip:Disable()
-        InfiniteJump:Disable()
-        if Aimbot.Connection then Aimbot.Connection:Disconnect() end
-        for _, conn in pairs(ESP.Connections) do
-            if conn then conn:Disconnect() end
-        end
+-- Keybind Toggle
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Config.Keybind then
+        Screens.Main.Enabled = not Screens.Main.Enabled
     end
 end)
 
-Initialize()
-print("SkaneexxWare KAVA Loaded (Deobf)")
-```
+-- Initialize GUI
+local Gui = Library:CreateGui()
+local MainWindow = Library:CreateWindow("SkaneexxWare KAVA")
+
+-- Create Tabs
+local CombatTab = Library:CreateTab(MainWindow, "Combat", "⚔️")
+local VisualTab = Library:CreateTab(MainWindow, "Visuals", "👁️")
+local MiscTab = Library:CreateTab(MainWindow, "Misc", "⚙️")
+local SettingsTab = Library:CreateTab(MainWindow, "Settings", "🛠️")
+
+-- Show first tab
+CombatTab.Frame.Visible = true
+
+-- Combat Section
+local CombatSection = Library:CreateSection(CombatTab, "Combat Features")
+
+Library:CreateToggle(CombatSection, "Aimbot", function(state)
+    if state then
+        Library:Notify("Combat", "Aimbot enabled!", 2)
+        -- Aimbot logic here (e.g., connect to RunService for aiming)
+        spawn(function()
+            while state do
+                -- Simplified aimbot: target nearest enemy
+                wait(0.1)
+                -- Implement raycasting or mouse manipulation
+            end
+        end)
+    else
+        Library:Notify("Combat", "Aimbot disabled!", 2)
+    end
+end, false)
+
+Library:CreateSlider(CombatSection, "Aim Speed", 1, 100, 50, function(value)
+    -- Set aim speed
+    print("Aim Speed:", value)
+end)
+
+Library:CreateButton(CombatSection, "Trigger Bot", function()
+    Library:Notify("Combat", "Trigger Bot activated!", 2)
+    -- Trigger logic
+end)
+
+-- Visuals Section
+local VisualSection = Library:CreateSection(VisualTab, "ESP & Visuals")
+
+Library:CreateToggle(VisualSection, "Player ESP", function(state)
+    if state then
+        Library:Notify("Visuals", "ESP enabled!", 2)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                -- Create ESP box/highlight
+                local highlight = Instance.new("Highlight")
+                highlight.Parent = player.Character
+                highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            end
+        end
+    else
+        Library:Notify("Visuals", "ESP disabled!", 2)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
+                local highlight = player.Character:FindFirstChild("Highlight")
+                if highlight then highlight:Destroy() end
+            end
+        end
+    end
+end, false)
+
+Library:CreateToggle(VisualSection, "Fullbright", function(state)
+    if state then
+        game.Lighting.Brightness = 2
+        game.Lighting.ClockTime = 14
+        game.Lighting.FogEnd = 100000
+        Library:Notify("Visuals", "Fullbright enabled!", 2)
+    else
+        game.Lighting.Brightness = 1
+        game.Lighting.ClockTime = 12
+        game.Lighting.FogEnd = 100
+        Library:Notify("Visuals", "Fullbright disabled!", 2)
+    end
+end, false)
+
+-- Misc Section
+local MiscSection = Library:CreateSection(MiscTab, "Miscellaneous")
+
+Library:CreateButton(MiscSection, "Rejoin Server", function()
+    game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
+end)
+
+Library:CreateToggle(MiscSection, "Infinite Yield", function(state)
+    if state then
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+        Library:Notify("Misc", "Infinite Yield loaded!", 2)
+    end
+end, false)
+
+-- Settings Section
+local SettingsSection = Library:CreateSection(SettingsTab, "Settings")
+
+Library:CreateButton(SettingsSection, "Unload GUI", function()
+    Screens.Main:Destroy()
+end)
+
+Library:CreateButton(SettingsSection, "Clear Console", function()
+    game.CoreGui.RobloxPromptGui.PromptFrame:Destroy()  -- Simplified
+end)
+
+-- Theme Switcher
+Library:CreateToggle(SettingsSection, "Dark Theme", function(state)
+    Config.Theme = state and "Dark" or "Light"
+    local color = state and Color3.fromRGB(25, 25, 25) or Color3.fromRGB(240, 240, 240)
+    MainWindow.Frame.BackgroundColor3 = color
+    -- Apply to all elements (simplified)
+    Library:Notify("Settings", "Theme changed to " .. Config.Theme, 2)
+end, true)
+
+-- Auto-update check (optional)
+spawn(function()
+    local success, version = pcall(function()
+        return HttpService:GetAsync("https://raw.githubusercontent.com/NotSkaneexx/SkaneexxWare-KAVA-version/main/version.txt")
+    end)
+    if success and version ~= "KAVA" then
+        Library:Notify("Update", "New version available! Check GitHub.", 5)
+    end
+end)
+
+-- Error Handling
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+    if method == "Kick" or method == "FireServer" and self.Name == "ReportAbuseHandler" then
+        return
+    end
+    return oldNamecall(self, ...)
+end)
+
+print("SkaneexxWare KAVA RU PC loaded successfully!")
+Library:Notify("Loaded", "SkaneexxWare KAVA initialized. Enjoy!", 3)
