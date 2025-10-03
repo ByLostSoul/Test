@@ -1,1 +1,326 @@
 
+```lua
+-- SkaneexxWare KAVA RU PC (Deobfuscated)
+-- Original: Obfuscated loader with XOR + junk
+-- Deobf: Cleaned ESP/Aimbot/Speedhack for RU servers
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+-- Config
+local Config = {
+    ESP = true,
+    Aimbot = true,
+    SpeedHack = true,
+    NoClip = false,
+    Fly = false,
+    InfiniteJump = false,
+    TeamCheck = true,
+    WallCheck = true,
+    FOV = 120,
+    Speed = 50,
+    FlySpeed = 100
+}
+
+-- ESP Module
+local ESP = {}
+ESP.Connections = {}
+ESP.Drawings = {}
+
+function ESP:CreateESP(player)
+    if player == LocalPlayer then return end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+    local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "ESP_" .. player.Name
+    Billboard.Parent = player.Character.Head
+    Billboard.Size = UDim2.new(0, 200, 0, 50)
+    Billboard.StudsOffset = Vector3.new(0, 2, 0)
+    Billboard.AlwaysOnTop = true
+
+    local NameLabel = Instance.new("TextLabel")
+    NameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    NameLabel.BackgroundTransparency = 1
+    NameLabel.Text = player.Name
+    NameLabel.TextColor3 = Color3.new(1, 1, 1)
+    NameLabel.TextStrokeTransparency = 0
+    NameLabel.TextScaled = true
+    NameLabel.Font = Enum.Font.SourceSansBold
+    NameLabel.Parent = Billboard
+
+    local HealthLabel = Instance.new("TextLabel")
+    HealthLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    HealthLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    HealthLabel.BackgroundTransparency = 1
+    HealthLabel.Text = "HP: 100"
+    HealthLabel.TextColor3 = Color3.new(0, 1, 0)
+    HealthLabel.TextStrokeTransparency = 0
+    HealthLabel.TextScaled = true
+    HealthLabel.Font = Enum.Font.SourceSans
+    HealthLabel.Parent = Billboard
+
+    local Box = Drawing.new("Square")
+    Box.Thickness = 2
+    Box.Color = Color3.new(1, 0, 0)
+    Box.Transparency = 1
+    Box.Filled = false
+    Box.Visible = false
+
+    ESP.Drawings[player] = {Billboard = Billboard, Box = Box}
+    ESP.Connections[player] = RunService.Heartbeat:Connect(function()
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+        local char = player.Character
+        local root = char.HumanoidRootPart
+        local humanoid = char:FindFirstChild("Humanoid")
+
+        -- Update Health
+        if humanoid then
+            HealthLabel.Text = "HP: " .. math.floor(humanoid.Health)
+            HealthLabel.TextColor3 = Color3.fromHSV(humanoid.Health / humanoid.MaxHealth, 1, 1)
+        end
+
+        -- Box ESP
+        local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+        if onScreen then
+            local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0)) - Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))).Magnitude
+            Box.Size = Vector2.new(size, size * 1.5)
+            Box.Position = Vector2.new(screenPos.X - size / 2, screenPos.Y - size * 0.75)
+            Box.Visible = true
+        else
+            Box.Visible = false
+        end
+    end)
+end
+
+function ESP:RemoveESP(player)
+    if ESP.Connections[player] then
+        ESP.Connections[player]:Disconnect()
+        ESP.Connections[player] = nil
+    end
+    if ESP.Drawings[player] then
+        for _, obj in pairs(ESP.Drawings[player]) do
+            if obj then obj:Destroy() end
+        end
+        ESP.Drawings[player] = nil
+    end
+end
+
+-- Aimbot Module
+local Aimbot = {}
+Aimbot.Target = nil
+Aimbot.Connection = nil
+
+function Aimbot:FindTarget()
+    local closest, dist = nil, math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            if Config.TeamCheck and player.Team == LocalPlayer.Team then continue end
+            local head = player.Character.Head
+            local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+            if not onScreen then continue end
+            local distance = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+            if distance < dist and distance < Config.FOV then
+                dist = distance
+                closest = head
+            end
+        end
+    end
+    return closest
+end
+
+function Aimbot:Update()
+    Aimbot.Target = Aimbot:FindTarget()
+    if Aimbot.Target then
+        local targetPos = Camera:WorldToViewportPoint(Aimbot.Target.Position)
+        mousemoverel((targetPos.X - Mouse.X) / 10, (targetPos.Y - Mouse.Y) / 10)  -- Smooth aim
+    end
+end
+
+-- SpeedHack
+local SpeedHack = {}
+SpeedHack.BodyVelocity = nil
+
+function SpeedHack:Enable()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        SpeedHack.BodyVelocity = Instance.new("BodyVelocity")
+        SpeedHack.BodyVelocity.MaxForce = Vector3.new(4000, 0, 4000)
+        SpeedHack.BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        SpeedHack.BodyVelocity.Parent = LocalPlayer.Character.HumanoidRootPart
+
+        SpeedHack.Connection = RunService.Heartbeat:Connect(function()
+            local moveVector = Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector - Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + Camera.CFrame.RightVector end
+            SpeedHack.BodyVelocity.Velocity = moveVector * Config.Speed
+        end)
+    end
+end
+
+function SpeedHack:Disable()
+    if SpeedHack.Connection then SpeedHack.Connection:Disconnect() end
+    if SpeedHack.BodyVelocity then SpeedHack.BodyVelocity:Destroy() end
+end
+
+-- Fly Module
+local Fly = {}
+Fly.BodyVelocity = nil
+Fly.BodyGyro = nil
+
+function Fly:Enable()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        Fly.BodyVelocity = Instance.new("BodyVelocity")
+        Fly.BodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+        Fly.BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        Fly.BodyVelocity.Parent = LocalPlayer.Character.HumanoidRootPart
+
+        Fly.BodyGyro = Instance.new("BodyGyro")
+        Fly.BodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
+        Fly.BodyGyro.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+        Fly.BodyGyro.Parent = LocalPlayer.Character.HumanoidRootPart
+
+        Fly.Connection = RunService.Heartbeat:Connect(function()
+            local moveVector = Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVector = moveVector + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveVector = moveVector - Vector3.new(0, 1, 0) end
+            Fly.BodyVelocity.Velocity = moveVector * (Config.FlySpeed / 16)
+            Fly.BodyGyro.CFrame = Camera.CFrame
+        end)
+    end
+end
+
+function Fly:Disable()
+    if Fly.Connection then Fly.Connection:Disconnect() end
+    if Fly.BodyVelocity then Fly.BodyVelocity:Destroy() end
+    if Fly.BodyGyro then Fly.BodyGyro:Destroy() end
+end
+
+-- NoClip
+local NoClip = {}
+NoClip.Connection = nil
+
+function NoClip:Enable()
+    NoClip.Connection = RunService.Stepped:Connect(function()
+        if LocalPlayer.Character then
+            for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+
+function NoClip:Disable()
+    if NoClip.Connection then NoClip.Connection:Disconnect() end
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+-- Infinite Jump
+local InfiniteJump = {}
+InfiniteJump.Connection = nil
+
+function InfiniteJump:Enable()
+    InfiniteJump.Connection = UserInputService.JumpRequest:Connect(function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end)
+end
+
+function InfiniteJump:Disable()
+    if InfiniteJump.Connection then InfiniteJump.Connection:Disconnect() end
+end
+
+-- Init
+local function Initialize()
+    -- ESP Init
+    if Config.ESP then
+        for _, player in pairs(Players:GetPlayers()) do
+            ESP:CreateESP(player)
+        end
+        Players.PlayerAdded:Connect(function(player)
+            player.CharacterAdded:Connect(function()
+                ESP:CreateESP(player)
+            end)
+        end)
+        Players.PlayerRemoving:Connect(ESP.RemoveESP)
+    end
+
+    -- Aimbot Init
+    if Config.Aimbot then
+        Aimbot.Connection = RunService.RenderStepped:Connect(Aimbot.Update)
+    end
+
+    -- SpeedHack Init
+    if Config.SpeedHack then
+        SpeedHack:Enable()
+    end
+
+    -- Other toggles
+    if Config.NoClip then NoClip:Enable() end
+    if Config.Fly then Fly:Enable() end
+    if Config.InfiniteJump then InfiniteJump:Enable() end
+
+    -- GUI (Simple toggle)
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Size = UDim2.new(0, 100, 0, 50)
+    ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+    ToggleButton.Text = "Toggle All"
+    ToggleButton.Parent = ScreenGui
+
+    local toggled = false
+    ToggleButton.MouseButton1Click:Connect(function()
+        toggled = not toggled
+        Config.ESP = toggled
+        Config.Aimbot = toggled
+        Config.SpeedHack = toggled
+        -- Re-init as needed
+        if toggled then
+            SpeedHack:Enable()
+            Fly:Enable()
+        else
+            SpeedHack:Disable()
+            Fly:Disable()
+        end
+    end)
+end
+
+-- Cleanup on leave
+Players.PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        SpeedHack:Disable()
+        Fly:Disable()
+        NoClip:Disable()
+        InfiniteJump:Disable()
+        if Aimbot.Connection then Aimbot.Connection:Disconnect() end
+        for _, conn in pairs(ESP.Connections) do
+            if conn then conn:Disconnect() end
+        end
+    end
+end)
+
+Initialize()
+print("SkaneexxWare KAVA Loaded (Deobf)")
+```
